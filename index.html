@@ -1,88 +1,60 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>iPad Drawing to Unity</title>
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background-color: white;
-        }
-
-        canvas {
-            display: block;
-        }
-    </style>
+<meta charset="UTF-8">
+<title>iPad Drawing</title>
+<style>
+  body, html { margin:0; padding:0; height:100%; overflow:hidden; background:white; }
+  canvas { touch-action: none; }
+</style>
 </head>
 <body>
-    <canvas id="myCanvas"></canvas>
+<canvas id="drawCanvas"></canvas>
 
-    <script>
-        const canvas = document.getElementById('myCanvas');
-        const ctx = canvas.getContext('2d');
+<script>
+const canvas = document.getElementById('drawCanvas');
+const ctx = canvas.getContext('2d');
 
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-        let drawing = false;
+ctx.strokeStyle = 'black';
+ctx.lineWidth = 5;
+ctx.lineCap = 'round';
 
-        // --- WebSocket 配置 ---
-        // Unity 端需要开启 WebSocket Server
-        // 替换成你电脑的局域网 IP 和端口，例如 ws://10.40.160.132:8080
-        const ws = new WebSocket("ws://10.40.160.132:8080");
+let drawing = false;
 
-        ws.onopen = () => {
-            console.log("✅ WebSocket 已连接 Unity！");
-        };
+// ⚠️ 改成你的电脑 IP
+const socket = new WebSocket("ws://100.79.173.73:8080");
 
-        ws.onerror = (err) => {
-            console.error("❌ WebSocket 连接失败：", err);
-        };
+socket.onopen = () => console.log("✅ 已连接 Unity");
+socket.onerror = e => console.log("❌ 连接失败", e);
 
-        // --- 绘画事件 ---
-        canvas.addEventListener('pointerdown', (e) => {
-            drawing = true;
-            ctx.beginPath();
-            ctx.moveTo(e.clientX, e.clientY);
+canvas.addEventListener('pointerdown', e => {
+    drawing = true;
+    ctx.beginPath();
+    ctx.moveTo(e.clientX, e.clientY);
+    send(e);
+});
 
-            // 发第一次点
-            sendPoint(e.clientX, e.clientY);
-        });
+canvas.addEventListener('pointermove', e => {
+    if (!drawing) return;
+    ctx.lineTo(e.clientX, e.clientY);
+    ctx.stroke();
+    send(e);
+});
 
-        canvas.addEventListener('pointermove', (e) => {
-            if (!drawing) return;
+canvas.addEventListener('pointerup', () => drawing = false);
 
-            ctx.lineTo(e.clientX, e.clientY);
-            ctx.strokeStyle = 'black';
-            ctx.lineWidth = 3;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.stroke();
-
-            // 实时发送坐标
-            sendPoint(e.clientX, e.clientY);
-        });
-
-        canvas.addEventListener('pointerup', () => {
-            drawing = false;
-        });
-        canvas.addEventListener('pointerleave', () => {
-            drawing = false;
-        });
-
-        // --- 发送数据给 Unity ---
-        function sendPoint(x, y) {
-            if (ws.readyState === WebSocket.OPEN) {
-                const message = JSON.stringify({
-                    x: x / canvas.width,   // 归一化 0~1
-                    y: y / canvas.height,
-                    color: [0, 0, 0],       // 这里可以改成传笔刷颜色
-                    lineWidth: 3
-                });
-                ws.send(message);
-            }
-        }
-    </script>
+function send(e) {
+    if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            x: e.clientX,
+            y: e.clientY,
+            color: [0,0,0]
+        }));
+    }
+}
+</script>
 </body>
 </html>
