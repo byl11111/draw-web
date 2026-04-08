@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>iPad Drawing</title>
+<title>iPad Drawing to Unity</title>
 <style>
   body, html { margin:0; padding:0; height:100%; overflow:hidden; background:white; }
-  canvas { touch-action: none; }
+  /* 禁止系统手势干扰绘画 */
+  canvas { touch-action: none; display: block; }
 </style>
 </head>
 <body>
@@ -15,8 +16,13 @@
 const canvas = document.getElementById('drawCanvas');
 const ctx = canvas.getContext('2d');
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+// 初始化画布尺寸
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
 
 ctx.strokeStyle = 'black';
 ctx.lineWidth = 5;
@@ -24,34 +30,54 @@ ctx.lineCap = 'round';
 
 let drawing = false;
 
-// ⚠️ 改成你的电脑 IP
+// ⚠️ 确保这里的 IP 是你电脑的局域网 IP (通过 cmd 输入 ipconfig 查看)
+// 端口 8080 对应 Node.js 监听的端口
 const socket = new WebSocket("ws://100.79.173.73:8080");
 
-socket.onopen = () => console.log("✅ 已连接 Unity");
-socket.onerror = e => console.log("❌ 连接失败", e);
+socket.onopen = () => {
+    console.log("✅ 已连接到 Node.js 中转站");
+    document.body.style.background = "#f0fff0"; // 连接成功变个色提醒
+};
+socket.onerror = e => console.log("❌ 连接失败，请检查 Node.js 是否启动", e);
 
 canvas.addEventListener('pointerdown', e => {
     drawing = true;
     ctx.beginPath();
     ctx.moveTo(e.clientX, e.clientY);
-    send(e);
+    send(e, "start"); // 发送开始信号
 });
 
 canvas.addEventListener('pointermove', e => {
     if (!drawing) return;
+    
+    // iPad 本地绘画预览
     ctx.lineTo(e.clientX, e.clientY);
     ctx.stroke();
-    send(e);
+    
+    send(e, "move"); // 发送移动信号
 });
 
-canvas.addEventListener('pointerup', () => drawing = false);
+canvas.addEventListener('pointerup', (e) => {
+    drawing = false;
+    send(e, "end"); // 发送结束信号
+});
 
-function send(e) {
+function send(e, type) {
     if (socket.readyState === WebSocket.OPEN) {
+        // 【核心改进】：归一化坐标
+        // 将坐标转换为 0.0 到 1.0 之间的比例
+        const normalizedX = e.clientX / canvas.width;
+        const normalizedY = e.clientY / canvas.height;
+        
+        // 获取压力值（Apple Pencil 支持，普通手指默认为 0.5 或 0）
+        const pressure = e.pressure || 0.5;
+
         socket.send(JSON.stringify({
-            x: e.clientX,
-            y: e.clientY,
-            color: [0,0,0]
+            type: type,         // 告诉 Unity 这是按下、移动还是抬起
+            x: normalizedX,    // 比例坐标 x
+            y: normalizedY,    // 比例坐标 y
+            p: pressure,       // 压力感应
+            color: [0, 0, 0]
         }));
     }
 }
